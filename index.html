@@ -305,16 +305,25 @@ function renderDeck(){
     el.type='button';
     el.setAttribute('data-id',card.id);
     el.setAttribute('aria-label',card.img.alt || card.img.title || 'Hidden photo');
+
+    // 🔧 Added: use card.img.alt as title on <img>
+    const alt = escapeHtml(card.img.alt || '');
+    const title = alt ? `title="${alt}"` : '';
+
     el.innerHTML=`
       <div class="inner">
         <div class="face back"><span class="q">?</span></div>
-        <div class="face front"><img alt="${escapeHtml(card.img.alt||'')}" src="${card.img.url}"></div>
+        <div class="face front">
+          <img alt="${alt}" ${title} src="${card.img.url}">
+        </div>
       </div>`;
+      
     el.addEventListener('click',()=>flipCard(el,card));
     el.addEventListener('keydown',ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); flipCard(el,card) } });
     grid.appendChild(el);
   }
 }
+
 
 async function flipCard(el, card){
   if(lock || el.classList.contains('flipped') || el.classList.contains('matched')) return;
