@@ -5,20 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>RS Wolves — Photo Memory Game</title>
 <style>
-  :root{
-    --bg:#0f172a; --panel:#111827; --card:#1f2937; --ink:#e5e7eb; --muted:#9ca3af;
-    --accent:#3b82f6; --accent-2:#22c55e; --gold:#f59e0b;
-  }
+  :root{ --bg:#0f172a; --panel:#111827; --card:#1f2937; --ink:#e5e7eb; --muted:#9ca3af; --accent:#3b82f6; --accent-2:#22c55e; --gold:#f59e0b; }
   *{ box-sizing:border-box }
   body{ margin:0; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; background:linear-gradient(120deg,#0b1225,#111827 40%,#0b1225); color:var(--ink); min-height:100vh; display:flex; flex-direction:column }
   header{ max-width:1100px; width:92vw; margin:18px auto 10px; display:flex; align-items:center; gap:16px; flex-wrap:wrap }
   .title{ font-size:clamp(22px,3.2vw,30px); font-weight:800; letter-spacing:.4px }
   .muted{ color:var(--muted) }
   .controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-left:auto }
-  select, button, label{
-    background:var(--card); color:var(--ink); border:1px solid #2b3443;
-    padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600
-  }
+  select, button, label{ background:var(--card); color:var(--ink); border:1px solid #2b3443; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600 }
   button.primary{ background:var(--accent); border-color:transparent; color:white }
   button.ghost{ background:transparent }
   main{ max-width:1100px; width:92vw; margin:0 auto 30px; display:grid; grid-template-columns: 280px 1fr; gap:18px }
@@ -42,7 +36,7 @@
       linear-gradient(180deg, #0b1225, #0d1528);
   }
   .card.flipped .inner{ transform:rotateY(180deg) }
-  img{ width:100%; height:100%; object-fit:cover; display:block } /* neat square scaling */
+  img{ width:100%; height:100%; object-fit:cover; display:block }
   footer{ margin:16px auto 22px; width:92vw; max-width:1100px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap }
   dialog{ background:#0b1225; border:1px solid #22304a; color:var(--ink); border-radius:16px; padding:18px 16px; width:min(560px,92vw) }
   dialog::backdrop{ background:rgba(0,0,0,.6) }
@@ -52,6 +46,14 @@
   .focusable{ outline:none }
   .focusable:focus-visible{ box-shadow:0 0 0 3px rgba(59,130,246,.8) inset }
   .tiny{ font-size:12px; color:var(--muted); margin-left:6px }
+
+  /* Loading overlay */
+  #loadingOverlay{
+    position:fixed; inset:0; background:rgba(15,23,42,0.9);
+    color:#fff; display:flex; align-items:center; justify-content:center;
+    font-size:24px; font-weight:700; z-index:9999; opacity:0; pointer-events:none;
+    transition:opacity .3s ease;
+  }
 </style>
 </head>
 <body>
@@ -116,150 +118,94 @@
     <div class="muted" style="line-height:1.6">
       Flip two cards. If the photos match, they stay face-up. If not, they flip back.
       Clear the board with the fewest moves in the fastest time! <br>
-	  When game is over, hover mouse over image for description of photo!
+      When game is over, hover mouse over image for description of photo!
     </div>
     <form method="dialog" style="margin-top:12px"><button class="primary">Got it</button></form>
   </dialog>
-	<div id="loadingOverlay" style="
-  position:fixed; inset:0; background:rgba(15,23,42,0.9);
-  color:#fff; display:flex; align-items:center; justify-content:center;
-  font-size:24px; font-weight:700; z-index:9999; opacity:0; pointer-events:none;
-  transition:opacity 0.3s ease;">
-  🔄 Loading new game...
-</div>
+
+  <!-- ✅ Move overlay ABOVE the script so it exists before newGame() runs -->
+  <div id="loadingOverlay">🔄 Loading new game...</div>
 
 <script>
 /* ===============================
-   YOUR APPTEGY FETCHER (included)
+   YOUR APPTEGY FETCHER (includes Cloudflare Worker proxy)
    =============================== */
 async function fetchApptegyImages({
   roots = ["/live-feed"],
-  pages = 2,              // crawl ?page=1..pages for each root
+  pages = 2,
   limit = 50
 } = {}) {
   const ORIGIN = "https://www.rs-wolves.com";
-  const IMG_CDNS = [
-    "core-docs.s3.amazonaws.com",
-    "cmsv2-assets.apptegy.net"
-  ];
+  const IMG_CDNS = ["core-docs.s3.amazonaws.com", "cmsv2-assets.apptegy.net"];
   const isCdnImg = src => IMG_CDNS.some(host => src.includes(host));
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-const PROXY = "https://rswolves-proxy.ckonkol.workers.dev/?url=";
+  const PROXY = "https://rswolves-proxy.ckonkol.workers.dev/?url="; // your Worker
 
-  // Fetch & parse one HTML page to a DOM
   async function getDOM(url) {
     const res = await fetch(PROXY + encodeURIComponent(url), { mode: "cors" });
-  if (!res.ok) throw new Error(`Fetch failed ${res.status} for ${url}`);
-  const html = await res.text();
-  return new DOMParser().parseFromString(html, "text/html");
+    if (!res.ok) throw new Error(`Fetch failed ${res.status} for ${url}`);
+    const html = await res.text();
+    return new DOMParser().parseFromString(html, "text/html");
   }
+  function textTrim(s){ return (s||"").replace(/\s+/g," ").trim(); }
 
-  function textTrim(s) {
-    return (s || "").replace(/\s+/g, " ").trim();
-  }
-
-  // Try to find a post container and pull some surrounding text & date
-  function extractContext(imgEl) {
-    // Walk up to something article-ish
+  function extractContext(imgEl){
     let node = imgEl;
-    for (let i = 0; i < 8 && node && node !== document; i++) {
+    for (let i=0;i<8 && node && node!==document;i++){
       if (node.matches?.("article, .post, .feed-item, .live-feed-item, li, section")) break;
       node = node.parentElement;
     }
     const container = node || imgEl.closest("figure") || imgEl.parentElement;
-
     const caption = container?.querySelector?.("figcaption")?.textContent || "";
     const timeEl = container?.querySelector?.("time[datetime]") || container?.querySelector?.("time");
     const dateISO = timeEl?.getAttribute?.("datetime") || "";
     const dateText = timeEl?.textContent || "";
-    // Fallback “x days ago” line
     const ageEl = container?.querySelector?.('*:is(.age, .meta, .byline, .date)') || null;
 
-    // A little post text near the image (minus figcaption)
     let postText = "";
-    if (container) {
+    if (container){
       const clone = container.cloneNode(true);
-      // drop captions & buttons
-      clone.querySelectorAll("figcaption, nav, button, a[aria-label='Read more']").forEach(n => n.remove());
-      // also drop other <img> so we don’t echo filenames
-      clone.querySelectorAll("img").forEach(n => n.remove());
+      clone.querySelectorAll("figcaption, nav, button, a[aria-label='Read more']").forEach(n=>n.remove());
+      clone.querySelectorAll("img").forEach(n=>n.remove());
       postText = textTrim(clone.textContent || "");
     }
-
-    return {
-      caption: textTrim(caption),
-      description: postText,                 // analogous to WP description
-      date: dateISO || textTrim(dateText) || textTrim(ageEl?.textContent || "")
-    };
+    return { caption:textTrim(caption), description:postText, date: dateISO || textTrim(dateText) || textTrim(ageEl?.textContent || "") };
   }
 
-  // Turn an <img> into a WP-like media object
-  function toWpLike(imgEl, pageUrl) {
+  function guessMime(u=""){ const m=u.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif)(?:\?|#|$)/); if(!m) return "image/*"; const ext=m[1]==="jpg"?"jpeg":m[1]; return `image/${ext}`; }
+
+  function toWpLike(imgEl, pageUrl){
     const url = imgEl.currentSrc || imgEl.src || "";
     const alt = imgEl.getAttribute("alt") || "";
     const title = imgEl.getAttribute("title") || alt || "";
-
     const { caption, description, date } = extractContext(imgEl);
-
-    return {
-      url,                                     // like source_url
-      title,                                   // title.rendered (flattened)
-      alt,                                     // alt_text
-      caption,                                 // caption.rendered (plain text here)
-      description,                             // description.rendered (plain text)
-      mime: guessMime(url),
-      date,                                    // ISO or “x days ago” if ISO not present
-      width: null,                             // unknown from static HTML
-      height: null,                            // unknown from static HTML
-      page_url: pageUrl                        // where we found it (extra convenience)
-    };
+    return { url, title, alt, caption, description, mime: guessMime(url), date, width:null, height:null, page_url: pageUrl };
   }
 
-  function guessMime(u = "") {
-    const m = u.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif)(?:\?|#|$)/);
-    if (!m) return "image/*";
-    const ext = m[1] === "jpg" ? "jpeg" : m[1];
-    return `image/${ext}`;
-  }
-
-  const results = [];
-  const seen = new Set(); // de-dupe by URL
-
-  for (const root of roots) {
-    for (let p = 1; p <= pages; p++) {
-      const url = `${ORIGIN}${root}${p > 1 ? `?page=${p}` : ""}`;
-      try {
+  const results=[]; const seen=new Set();
+  for (const root of roots){
+    for (let p=1; p<=pages; p++){
+      const url = `${ORIGIN}${root}${p>1?`?page=${p}`:""}`;
+      try{
         const dom = await getDOM(url);
-
-        // grab images coming from Apptegy CDNs
         const imgs = [...dom.querySelectorAll('img[src], source[srcset] ~ img, picture img')];
-        for (const img of imgs) {
+        for (const img of imgs){
           const src = img.currentSrc || img.src || "";
           if (!src) continue;
           if (!isCdnImg(src)) continue;
           if (/\.(svg|mp4|webm|pdf)(?:\?|#|$)/i.test(src)) continue;
-
           const media = toWpLike(img, url);
-          if (!seen.has(media.url)) {
-            seen.add(media.url);
-            results.push(media);
-            if (results.length >= limit) return results;
-          }
+          if (!seen.has(media.url)){ seen.add(media.url); results.push(media); if (results.length>=limit) return results; }
         }
-
-        // be gentle to their servers
         await sleep(250);
-      } catch (e) {
-        console.warn("Page fetch error:", e);
-      }
+      } catch(e){ console.warn("Page fetch error:", e); }
     }
   }
-
   return results;
 }
 
 /* ===============================
-   Optional Placeholder Provider
+   Placeholders
    =============================== */
 function getPlaceholderImages(n){
   const seed = Date.now().toString(36);
@@ -281,28 +227,30 @@ const pairsSel = $('#pairs'), newBtn = $('#newGame'), restartLink = $('#restartL
 const winDlg = $('#win'), howDlg = $('#how'), showHowBtn = $('#showHow'), playAgainBtn = $('#playAgain');
 const useRS = $('#useRS');
 
-/* 🔥 ADD THE FUNCTIONS HERE */
-function showLoading() {
+/* Loading overlay helpers */
+function showLoading(){
   const o = document.getElementById('loadingOverlay');
-  o.style.opacity = 1;
-  o.style.pointerEvents = "auto";
+  if(!o) return;
+  newBtn.disabled = true;
+  o.style.opacity = 1; o.style.pointerEvents = "auto";
 }
-function hideLoading() {
+function hideLoading(){
   const o = document.getElementById('loadingOverlay');
-  o.style.opacity = 0;
-  o.style.pointerEvents = "none";
+  if(!o) return;
+  o.style.opacity = 0; o.style.pointerEvents = "none";
+  newBtn.disabled = false;
 }
 
-let timer = null, seconds = 0, moves = 0, matches = 0, streak = 0;
-let lock = false, first = null, second = null, deck = [];
+let timer=null, seconds=0, moves=0, matches=0, streak=0;
+let lock=false, first=null, second=null, deck=[];
 let totalPairs = parseInt(pairsSel.value,10);
 
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a }
-function fmtTime(s){ const m = Math.floor(s/60).toString().padStart(2,'0'); const sec = (s%60).toString().padStart(2,'0'); return `${m}:${sec}` }
-function startTimer(){ stopTimer(); timer = setInterval(()=>{ seconds++; timeEl.textContent = fmtTime(seconds); }, 1000) }
+function fmtTime(s){ const m=Math.floor(s/60).toString().padStart(2,'0'); const sec=(s%60).toString().padStart(2,'0'); return `${m}:${sec}` }
+function startTimer(){ stopTimer(); timer=setInterval(()=>{ seconds++; timeEl.textContent=fmtTime(seconds) },1000) }
 function stopTimer(){ if(timer){ clearInterval(timer); timer=null } }
 function resetStats(){ seconds=0;moves=0;matches=0;streak=0; timeEl.textContent='00:00'; movesEl.textContent='0'; matchesEl.textContent='0'; streakEl.textContent='0' }
-function setGridColumns(pairCount){ const map={6:'repeat(4,1fr)',8:'repeat(4,1fr)',10:'repeat(5,1fr)',12:'repeat(6,1fr)'}; grid.style.gridTemplateColumns = map[pairCount] || 'repeat(4,1fr)' }
+function setGridColumns(n){ const map={6:'repeat(4,1fr)',8:'repeat(4,1fr)',10:'repeat(5,1fr)',12:'repeat(6,1fr)'}; grid.style.gridTemplateColumns = map[n] || 'repeat(4,1fr)' }
 function bestKey(){ return `best_${totalPairs}` } function getBest(){ return JSON.parse(localStorage.getItem(bestKey())||'null') } function setBest(o){ localStorage.setItem(bestKey(), JSON.stringify(o)) }
 function showBest(){ const b=getBest(); bestEl.textContent = b ? `Best ${totalPairs} pairs → ${fmtTime(b.time)} • ${b.moves} moves` : '' }
 function announceWin(){ const b=getBest(); const cur={time:seconds,moves}; let bestText='—'; if(!b || cur.time<b.time || (cur.time===b.time && cur.moves<b.moves)){ setBest(cur); bestText=`New Best! ${fmtTime(cur.time)} • ${cur.moves} moves` } else { bestText=`Best: ${fmtTime(b.time)} • ${b.moves} moves` } $('#winTime').textContent=fmtTime(seconds); $('#winMoves').textContent=moves; $('#winBest').textContent=bestText; stopTimer(); winDlg.showModal() }
@@ -327,24 +275,21 @@ function renderDeck(){
     el.setAttribute('data-id',card.id);
     el.setAttribute('aria-label',card.img.alt || card.img.title || 'Hidden photo');
 
-    // 🔧 Added: use card.img.alt as title on <img>
     const alt = escapeHtml(card.img.alt || '');
-    const title = alt ? `title="${alt}"` : '';
+    const titleAttr = alt ? `title="${alt}"` : '';
 
     el.innerHTML=`
       <div class="inner">
         <div class="face back"><span class="q">?</span></div>
         <div class="face front">
-          <img alt="${alt}" ${title} src="${card.img.url}">
+          <img alt="${alt}" ${titleAttr} src="${card.img.url}">
         </div>
       </div>`;
-      
     el.addEventListener('click',()=>flipCard(el,card));
     el.addEventListener('keydown',ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); flipCard(el,card) } });
     grid.appendChild(el);
   }
 }
-
 
 async function flipCard(el, card){
   if(lock || el.classList.contains('flipped') || el.classList.contains('matched')) return;
@@ -364,27 +309,20 @@ async function flipCard(el, card){
   }
 }
 
-/* Suggested RS Wolves roots (district + schools) */
-const RS_ROOTS = [
-  "/live-feed",          // district
-  "/o/hs/live-feed",     // high school
-  "/o/ms/live-feed",     // middle school
-  "/o/ps/live-feed",     // primary
-  "/o/es/live-feed",     // elementary
-  "/o/gtc/live-feed"     // Table Rock Career Center
-];
+/* RS Wolves feeds */
+const RS_ROOTS = [ "/live-feed", "/o/hs/live-feed", "/o/ms/live-feed", "/o/ps/live-feed", "/o/es/live-feed", "/o/gtc/live-feed" ];
 
 async function newGame(){
-  showLoading(); // 🔥 show overlay immediately
+  showLoading();
   stopTimer(); resetStats(); winDlg.close();
   totalPairs = parseInt(pairsSel.value,10);
   setGridColumns(totalPairs); showBest();
 
-  let images = [];
+  let images=[];
   if(useRS.checked){
-    try {
+    try{
       const rsImgs = await fetchApptegyImages({ roots: RS_ROOTS, pages: 3, limit: 80 });
-      images = rsImgs.filter(x => x && x.url);
+      images = rsImgs.filter(x=>x && x.url);
       if(images.length < totalPairs){
         const more = await fetchApptegyImages({ roots: ["/live-feed"], pages: 6, limit: 80 });
         images = images.concat(more);
@@ -400,21 +338,18 @@ async function newGame(){
 
   deck = buildDeck(images, totalPairs);
   renderDeck();
-
-  hideLoading(); // ✅ hide overlay when ready
+  hideLoading();
 }
 
-
 /* Events */
-document.getElementById('newGame').addEventListener('click', newGame);
-document.getElementById('restartLink').addEventListener('click', e=>{ e.preventDefault(); newGame() });
-document.getElementById('pairs').addEventListener('change', newGame);
-document.getElementById('showHow').addEventListener('click', ()=> howDlg.showModal());
-document.getElementById('playAgain').addEventListener('click', ()=>{ winDlg.close(); newGame() });
+newBtn.addEventListener('click', newGame);
+restartLink.addEventListener('click', e=>{ e.preventDefault(); newGame() });
+pairsSel.addEventListener('change', newGame);
+showHowBtn.addEventListener('click', ()=> howDlg.showModal());
+playAgainBtn.addEventListener('click', ()=>{ winDlg.close(); newGame() });
 
-/* Init */
-newGame();
+/* ✅ Ensure DOM is ready before first run (overlay exists) */
+window.addEventListener('DOMContentLoaded', newGame);
 </script>
-
 </body>
 </html>
