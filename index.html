@@ -274,7 +274,8 @@ const pairsSel = $('#pairs'), newBtn = $('#newGame'), restartLink = $('#restartL
 const winDlg = $('#win'), howDlg = $('#how'), showHowBtn = $('#showHow'), playAgainBtn = $('#playAgain');
 const useRS = $('#useRS');
 
-	function showLoading() {
+/* 🔥 ADD THE FUNCTIONS HERE */
+function showLoading() {
   const o = document.getElementById('loadingOverlay');
   o.style.opacity = 1;
   o.style.pointerEvents = "auto";
@@ -284,7 +285,6 @@ function hideLoading() {
   o.style.opacity = 0;
   o.style.pointerEvents = "none";
 }
-
 
 let timer = null, seconds = 0, moves = 0, matches = 0, streak = 0;
 let lock = false, first = null, second = null, deck = [];
