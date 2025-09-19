@@ -138,6 +138,18 @@ async function fetchApptegyImages({
   const isCdnImg = src => IMG_CDNS.some(host => src.includes(host));
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PROXY = "https://rswolves-proxy.ckonkol.workers.dev/?url=";
+
+	function showLoading() {
+  const o = document.getElementById('loadingOverlay');
+  o.style.opacity = 1;
+  o.style.pointerEvents = "auto";
+}
+function hideLoading() {
+  const o = document.getElementById('loadingOverlay');
+  o.style.opacity = 0;
+  o.style.pointerEvents = "none";
+}
+
   // Fetch & parse one HTML page to a DOM
   async function getDOM(url) {
     const res = await fetch(PROXY + encodeURIComponent(url), { mode: "cors" });
@@ -355,6 +367,7 @@ const RS_ROOTS = [
 ];
 
 async function newGame(){
+  showLoading(); // 🔥 show overlay immediately
   stopTimer(); resetStats(); winDlg.close();
   totalPairs = parseInt(pairsSel.value,10);
   setGridColumns(totalPairs); showBest();
@@ -362,11 +375,9 @@ async function newGame(){
   let images = [];
   if(useRS.checked){
     try {
-      // Pull a generous set (pages x roots), then slice to pair count
       const rsImgs = await fetchApptegyImages({ roots: RS_ROOTS, pages: 3, limit: 80 });
       images = rsImgs.filter(x => x && x.url);
       if(images.length < totalPairs){
-        // If not enough, try just district feed deeper
         const more = await fetchApptegyImages({ roots: ["/live-feed"], pages: 6, limit: 80 });
         images = images.concat(more);
       }
@@ -381,7 +392,10 @@ async function newGame(){
 
   deck = buildDeck(images, totalPairs);
   renderDeck();
+
+  hideLoading(); // ✅ hide overlay when ready
 }
+
 
 /* Events */
 document.getElementById('newGame').addEventListener('click', newGame);
@@ -393,5 +407,13 @@ document.getElementById('playAgain').addEventListener('click', ()=>{ winDlg.clos
 /* Init */
 newGame();
 </script>
+	<div id="loadingOverlay" style="
+  position:fixed; inset:0; background:rgba(15,23,42,0.9);
+  color:#fff; display:flex; align-items:center; justify-content:center;
+  font-size:24px; font-weight:700; z-index:9999; opacity:0; pointer-events:none;
+  transition:opacity 0.3s ease;">
+  🔄 Loading new game...
+</div>
+
 </body>
 </html>
