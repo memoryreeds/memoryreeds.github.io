@@ -139,17 +139,6 @@ async function fetchApptegyImages({
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PROXY = "https://rswolves-proxy.ckonkol.workers.dev/?url=";
 
-	function showLoading() {
-  const o = document.getElementById('loadingOverlay');
-  o.style.opacity = 1;
-  o.style.pointerEvents = "auto";
-}
-function hideLoading() {
-  const o = document.getElementById('loadingOverlay');
-  o.style.opacity = 0;
-  o.style.pointerEvents = "none";
-}
-
   // Fetch & parse one HTML page to a DOM
   async function getDOM(url) {
     const res = await fetch(PROXY + encodeURIComponent(url), { mode: "cors" });
@@ -284,6 +273,18 @@ const timeEl = $('#time'), movesEl = $('#moves'), matchesEl = $('#matches'), str
 const pairsSel = $('#pairs'), newBtn = $('#newGame'), restartLink = $('#restartLink');
 const winDlg = $('#win'), howDlg = $('#how'), showHowBtn = $('#showHow'), playAgainBtn = $('#playAgain');
 const useRS = $('#useRS');
+
+	function showLoading() {
+  const o = document.getElementById('loadingOverlay');
+  o.style.opacity = 1;
+  o.style.pointerEvents = "auto";
+}
+function hideLoading() {
+  const o = document.getElementById('loadingOverlay');
+  o.style.opacity = 0;
+  o.style.pointerEvents = "none";
+}
+
 
 let timer = null, seconds = 0, moves = 0, matches = 0, streak = 0;
 let lock = false, first = null, second = null, deck = [];
