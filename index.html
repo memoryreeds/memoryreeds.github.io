@@ -136,13 +136,13 @@ async function fetchApptegyImages({
   ];
   const isCdnImg = src => IMG_CDNS.some(host => src.includes(host));
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-
+const PROXY = "https://rswolves-proxy.ckonkol.workers.dev/?url=";
   // Fetch & parse one HTML page to a DOM
   async function getDOM(url) {
-    const res = await fetch(url, { mode: "cors" });
-    if (!res.ok) throw new Error(`Fetch failed ${res.status} for ${url}`);
-    const html = await res.text();
-    return new DOMParser().parseFromString(html, "text/html");
+    const res = await fetch(PROXY + encodeURIComponent(url), { mode: "cors" });
+  if (!res.ok) throw new Error(`Fetch failed ${res.status} for ${url}`);
+  const html = await res.text();
+  return new DOMParser().parseFromString(html, "text/html");
   }
 
   function textTrim(s) {
