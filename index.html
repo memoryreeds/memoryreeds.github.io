@@ -9,7 +9,6 @@
   *{ box-sizing:border-box }
   body{ margin:0; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; background:linear-gradient(120deg,#0b1225,#111827 40%,#0b1225); color:var(--ink); min-height:100vh; display:flex; flex-direction:column }
   header{ max-width:1100px; width:92vw; margin:18px auto 10px; display:flex; align-items:center; gap:16px; flex-wrap:wrap }
-  .title{ font-size:clamp(22px,3.2vw,30px); font-weight:800; letter-spacing:.4px }
   .muted{ color:var(--muted) }
   .controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-left:auto }
   select, button, label{ background:var(--card); color:var(--ink); border:1px solid #2b3443; padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600 }
@@ -70,12 +69,7 @@
     transition:opacity .3s ease;
   }
 
-.title img {
-  height: 0.9em;            /* a bit smaller than text */
-  vertical-align: middle;
-  margin-right: 6px;
-  width: auto;
-}
+
 
 #loadingOverlay::after {
   content: "";
@@ -132,10 +126,18 @@
 }
 
 /* Title logo stays tidy on mobile */
+.title {
+  display: flex;
+  align-items: center;   /* vertically center text with logo */
+  gap: 6px;              /* small space between logo & text */
+  font-size: clamp(22px, 3.2vw, 30px);
+  font-weight: 800;
+  letter-spacing: .4px;
+}
+
 .title img {
-  height: 0.9em;
-  vertical-align: middle;
-  margin-right: 6px;
+  height: 0.9em;         /* scale with font size */
+  flex-shrink: 0;        /* prevent logo from squishing */
 }
 
 /* Loading overlay text scales down a bit on phones */
