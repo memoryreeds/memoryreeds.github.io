@@ -77,6 +77,21 @@
   width: auto;
 }
 
+#loadingOverlay::after {
+  content: "";
+  width: 28px;
+  height: 28px;
+  margin-left: 10px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
 
 </style>
@@ -342,23 +357,28 @@ async function flipCard(el, card){
 /* RS Wolves feeds */
 const RS_ROOTS = [ "/live-feed", "/o/hs/live-feed", "/o/ms/live-feed", "/o/ps/live-feed", "/o/es/live-feed", "/o/gtc/live-feed" ];
 
-async function newGame(){
-  showLoading();
-  stopTimer(); resetStats(); winDlg.close();
-  totalPairs = parseInt(pairsSel.value,10);
-  setGridColumns(totalPairs); showBest();
+async function newGame() {
+  showLoading();  // show overlay immediately
+  const minLoad = new Promise(r => setTimeout(r, 3000)); // ⏱ force 3s display
 
-  let images=[];
-  if(useRS.checked){
-    try{
+  stopTimer();
+  resetStats();
+  winDlg.close();
+  totalPairs = parseInt(pairsSel.value, 10);
+  setGridColumns(totalPairs);
+  showBest();
+
+  let images = [];
+  if (useRS.checked) {
+    try {
       const rsImgs = await fetchApptegyImages({ roots: RS_ROOTS, pages: 3, limit: 80 });
-      images = rsImgs.filter(x=>x && x.url);
-      if(images.length < totalPairs){
+      images = rsImgs.filter(x => x && x.url);
+      if (images.length < totalPairs) {
         const more = await fetchApptegyImages({ roots: ["/live-feed"], pages: 6, limit: 80 });
         images = images.concat(more);
       }
       images = shuffle(images).slice(0, totalPairs);
-    } catch(err){
+    } catch (err) {
       console.warn('Apptegy fetch failed; using placeholders:', err);
       images = getPlaceholderImages(totalPairs);
     }
@@ -368,8 +388,11 @@ async function newGame(){
 
   deck = buildDeck(images, totalPairs);
   renderDeck();
-  hideLoading();
+
+  await minLoad; // ✅ ensures at least 3 seconds pass
+  hideLoading(); // hide overlay AFTER minimum time
 }
+
 
 /* Events */
 newBtn.addEventListener('click', newGame);
