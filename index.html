@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RS Wolves — Photo Memory Game</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#111827; --card:#1f2937; --ink:#e5e7eb; --muted:#9ca3af;
+    --accent:#3b82f6; --accent-2:#22c55e; --gold:#f59e0b;
+  }
+  *{ box-sizing:border-box }
+  body{ margin:0; font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; background:linear-gradient(120deg,#0b1225,#111827 40%,#0b1225); color:var(--ink); min-height:100vh; display:flex; flex-direction:column }
+  header{ max-width:1100px; width:92vw; margin:18px auto 10px; display:flex; align-items:center; gap:16px; flex-wrap:wrap }
+  .title{ font-size:clamp(22px,3.2vw,30px); font-weight:800; letter-spacing:.4px }
+  .muted{ color:var(--muted) }
+  .controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-left:auto }
+  select, button, label{
+    background:var(--card); color:var(--ink); border:1px solid #2b3443;
+    padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600
+  }
+  button.primary{ background:var(--accent); border-color:transparent; color:white }
+  button.ghost{ background:transparent }
+  main{ max-width:1100px; width:92vw; margin:0 auto 30px; display:grid; grid-template-columns: 280px 1fr; gap:18px }
+  @media (max-width:900px){ main{ grid-template-columns:1fr } }
+  .panel{ background:linear-gradient(180deg,#0f172a,#0b1225); border:1px solid #22304a; border-radius:16px; padding:14px 14px 16px; box-shadow:0 10px 30px rgba(0,0,0,.25) }
+  .stats{ display:grid; grid-template-columns:1fr 1fr; gap:8px }
+  .stat{ background:#0d1528; border:1px solid #1b2942; border-radius:12px; padding:10px 12px }
+  .stat .label{ font-size:12px; color:var(--muted) }
+  .stat .val{ font-size:20px; font-weight:800 }
+  .best{ margin-top:10px; font-size:13px; color:var(--gold) }
+  .grid{ display:grid; gap:10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .card{ position:relative; height:0; padding-bottom:100%; perspective:1000px; border-radius:14px; overflow:hidden }
+  .inner{ position:absolute; inset:0; transition:transform .45s ease; transform-style:preserve-3d; border-radius:14px; box-shadow:0 10px 24px rgba(0,0,0,.22), inset 0 0 0 1px #22304a }
+  .card.matched .inner{ box-shadow:0 0 0 2px var(--accent-2), inset 0 0 0 2px var(--accent-2) }
+  .face{ position:absolute; inset:0; backface-visibility:hidden; border-radius:14px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:var(--panel) }
+  .front{ transform:rotateY(180deg) }
+  .back{ color:#b7c4ff; font-size:42px; font-weight:900; letter-spacing:1px;
+    background:
+      radial-gradient(120px 120px at 20% 10%, rgba(59,130,246,.18), transparent 60%),
+      radial-gradient(120px 120px at 80% 90%, rgba(34,197,94,.18), transparent 60%),
+      linear-gradient(180deg, #0b1225, #0d1528);
+  }
+  .card.flipped .inner{ transform:rotateY(180deg) }
+  img{ width:100%; height:100%; object-fit:cover; display:block } /* neat square scaling */
+  footer{ margin:16px auto 22px; width:92vw; max-width:1100px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap }
+  dialog{ background:#0b1225; border:1px solid #22304a; color:var(--ink); border-radius:16px; padding:18px 16px; width:min(560px,92vw) }
+  dialog::backdrop{ background:rgba(0,0,0,.6) }
+  .win-title{ font-size:22px; font-weight:800; margin:0 0 8px }
+  .win-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0 }
+  .win-grid .stat{ background:#0d1528 }
+  .focusable{ outline:none }
+  .focusable:focus-visible{ box-shadow:0 0 0 3px rgba(59,130,246,.8) inset }
+  .tiny{ font-size:12px; color:var(--muted); margin-left:6px }
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">🧠 RS Wolves — Photo Memory Match</div>
+    <div class="controls">
+      <label>Pairs:
+        <select id="pairs">
+          <option value="6">12 cards</option>
+          <option value="8" selected>16 cards</option>
+          <option value="10">20 cards</option>
+          <option value="12">24 cards</option>
+        </select>
+      </label>
+      <label class="muted" title="If off, placeholders are used">
+        <input id="useRS" type="checkbox" checked />
+        Use rs-wolves.com photos
+      </label>
+      <button id="newGame" class="primary">New Game</button>
+      <button id="showHow" class="ghost" title="How to play">How to Play</button>
+    </div>
+  </header>
+
+  <main>
+    <aside class="panel">
+      <h3 style="margin:6px 4px 10px">Dashboard</h3>
+      <div class="stats">
+        <div class="stat"><div class="label">Time</div><div id="time" class="val">00:00</div></div>
+        <div class="stat"><div class="label">Moves</div><div id="moves" class="val">0</div></div>
+        <div class="stat"><div class="label">Matches</div><div id="matches" class="val">0</div></div>
+        <div class="stat"><div class="label">Streak</div><div id="streak" class="val">0</div></div>
+      </div>
+      <div id="best" class="best"></div>
+      <div class="tiny">Images scale to perfect squares with <code>object-fit: cover</code>.</div>
+    </aside>
+
+    <section class="panel">
+      <div id="grid" class="grid" aria-label="Memory game grid"></div>
+    </section>
+  </main>
+
+  <footer>
+    <div>How to Play: Flip cards to reveal photos and match pairs of identical images. Match all pairs to win!</div>
+    <div><a href="#" id="restartLink" style="color:#93c5fd;text-decoration:none">↻ Restart</a></div>
+  </footer>
+
+  <dialog id="win">
+    <p class="win-title">🎉 You matched them all!</p>
+    <div class="win-grid">
+      <div class="stat"><div class="label">Time</div><div id="winTime" class="val">—</div></div>
+      <div class="stat"><div class="label">Moves</div><div id="winMoves" class="val">—</div></div>
+      <div class="stat"><div class="label">Best</div><div id="winBest" class="val">—</div></div>
+    </div>
+    <div style="display:flex; gap:10px; justify-content:flex-end">
+      <form method="dialog"><button class="ghost">Close</button></form>
+      <button id="playAgain" class="primary">Play Again</button>
+    </div>
+  </dialog>
+
+  <dialog id="how">
+    <p class="win-title">How to Play</p>
+    <div class="muted" style="line-height:1.6">
+      Flip two cards. If the photos match, they stay face-up. If not, they flip back.
+      Clear the board with the fewest moves in the fastest time!
+    </div>
+    <form method="dialog" style="margin-top:12px"><button class="primary">Got it</button></form>
+  </dialog>
+
+<script>
+/* ===============================
+   YOUR APPTEGY FETCHER (included)
+   =============================== */
+async function fetchApptegyImages({
+  roots = ["/live-feed"],
+  pages = 2,              // crawl ?page=1..pages for each root
+  limit = 50
+} = {}) {
+  const ORIGIN = "https://www.rs-wolves.com";
+  const IMG_CDNS = [
+    "core-docs.s3.amazonaws.com",
+    "cmsv2-assets.apptegy.net"
+  ];
+  const isCdnImg = src => IMG_CDNS.some(host => src.includes(host));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // Fetch & parse one HTML page to a DOM
+  async function getDOM(url) {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error(`Fetch failed ${res.status} for ${url}`);
+    const html = await res.text();
+    return new DOMParser().parseFromString(html, "text/html");
+  }
+
+  function textTrim(s) {
+    return (s || "").replace(/\s+/g, " ").trim();
+  }
+
+  // Try to find a post container and pull some surrounding text & date
+  function extractContext(imgEl) {
+    // Walk up to something article-ish
+    let node = imgEl;
+    for (let i = 0; i < 8 && node && node !== document; i++) {
+      if (node.matches?.("article, .post, .feed-item, .live-feed-item, li, section")) break;
+      node = node.parentElement;
+    }
+    const container = node || imgEl.closest("figure") || imgEl.parentElement;
+
+    const caption = container?.querySelector?.("figcaption")?.textContent || "";
+    const timeEl = container?.querySelector?.("time[datetime]") || container?.querySelector?.("time");
+    const dateISO = timeEl?.getAttribute?.("datetime") || "";
+    const dateText = timeEl?.textContent || "";
+    // Fallback “x days ago” line
+    const ageEl = container?.querySelector?.('*:is(.age, .meta, .byline, .date)') || null;
+
+    // A little post text near the image (minus figcaption)
+    let postText = "";
+    if (container) {
+      const clone = container.cloneNode(true);
+      // drop captions & buttons
+      clone.querySelectorAll("figcaption, nav, button, a[aria-label='Read more']").forEach(n => n.remove());
+      // also drop other <img> so we don’t echo filenames
+      clone.querySelectorAll("img").forEach(n => n.remove());
+      postText = textTrim(clone.textContent || "");
+    }
+
+    return {
+      caption: textTrim(caption),
+      description: postText,                 // analogous to WP description
+      date: dateISO || textTrim(dateText) || textTrim(ageEl?.textContent || "")
+    };
+  }
+
+  // Turn an <img> into a WP-like media object
+  function toWpLike(imgEl, pageUrl) {
+    const url = imgEl.currentSrc || imgEl.src || "";
+    const alt = imgEl.getAttribute("alt") || "";
+    const title = imgEl.getAttribute("title") || alt || "";
+
+    const { caption, description, date } = extractContext(imgEl);
+
+    return {
+      url,                                     // like source_url
+      title,                                   // title.rendered (flattened)
+      alt,                                     // alt_text
+      caption,                                 // caption.rendered (plain text here)
+      description,                             // description.rendered (plain text)
+      mime: guessMime(url),
+      date,                                    // ISO or “x days ago” if ISO not present
+      width: null,                             // unknown from static HTML
+      height: null,                            // unknown from static HTML
+      page_url: pageUrl                        // where we found it (extra convenience)
+    };
+  }
+
+  function guessMime(u = "") {
+    const m = u.toLowerCase().match(/\.(jpg|jpeg|png|webp|gif)(?:\?|#|$)/);
+    if (!m) return "image/*";
+    const ext = m[1] === "jpg" ? "jpeg" : m[1];
+    return `image/${ext}`;
+  }
+
+  const results = [];
+  const seen = new Set(); // de-dupe by URL
+
+  for (const root of roots) {
+    for (let p = 1; p <= pages; p++) {
+      const url = `${ORIGIN}${root}${p > 1 ? `?page=${p}` : ""}`;
+      try {
+        const dom = await getDOM(url);
+
+        // grab images coming from Apptegy CDNs
+        const imgs = [...dom.querySelectorAll('img[src], source[srcset] ~ img, picture img')];
+        for (const img of imgs) {
+          const src = img.currentSrc || img.src || "";
+          if (!src) continue;
+          if (!isCdnImg(src)) continue;
+          if (/\.(svg|mp4|webm|pdf)(?:\?|#|$)/i.test(src)) continue;
+
+          const media = toWpLike(img, url);
+          if (!seen.has(media.url)) {
+            seen.add(media.url);
+            results.push(media);
+            if (results.length >= limit) return results;
+          }
+        }
+
+        // be gentle to their servers
+        await sleep(250);
+      } catch (e) {
+        console.warn("Page fetch error:", e);
+      }
+    }
+  }
+
+  return results;
+}
+
+/* ===============================
+   Optional Placeholder Provider
+   =============================== */
+function getPlaceholderImages(n){
+  const seed = Date.now().toString(36);
+  return Array.from({length:n}, (_,i)=> ({
+    url: `https://picsum.photos/seed/${seed}-${i}/400/400`,
+    alt: `Placeholder #${i+1}`,
+    title: `Photo ${i+1}`,
+    caption: '', description: '', mime: 'image/jpeg', date: ''
+  }));
+}
+
+/* ===============================
+   Game Logic
+   =============================== */
+const $ = s => document.querySelector(s);
+const grid = $('#grid');
+const timeEl = $('#time'), movesEl = $('#moves'), matchesEl = $('#matches'), streakEl = $('#streak'), bestEl = $('#best');
+const pairsSel = $('#pairs'), newBtn = $('#newGame'), restartLink = $('#restartLink');
+const winDlg = $('#win'), howDlg = $('#how'), showHowBtn = $('#showHow'), playAgainBtn = $('#playAgain');
+const useRS = $('#useRS');
+
+let timer = null, seconds = 0, moves = 0, matches = 0, streak = 0;
+let lock = false, first = null, second = null, deck = [];
+let totalPairs = parseInt(pairsSel.value,10);
+
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a }
+function fmtTime(s){ const m = Math.floor(s/60).toString().padStart(2,'0'); const sec = (s%60).toString().padStart(2,'0'); return `${m}:${sec}` }
+function startTimer(){ stopTimer(); timer = setInterval(()=>{ seconds++; timeEl.textContent = fmtTime(seconds); }, 1000) }
+function stopTimer(){ if(timer){ clearInterval(timer); timer=null } }
+function resetStats(){ seconds=0;moves=0;matches=0;streak=0; timeEl.textContent='00:00'; movesEl.textContent='0'; matchesEl.textContent='0'; streakEl.textContent='0' }
+function setGridColumns(pairCount){ const map={6:'repeat(4,1fr)',8:'repeat(4,1fr)',10:'repeat(5,1fr)',12:'repeat(6,1fr)'}; grid.style.gridTemplateColumns = map[pairCount] || 'repeat(4,1fr)' }
+function bestKey(){ return `best_${totalPairs}` } function getBest(){ return JSON.parse(localStorage.getItem(bestKey())||'null') } function setBest(o){ localStorage.setItem(bestKey(), JSON.stringify(o)) }
+function showBest(){ const b=getBest(); bestEl.textContent = b ? `Best ${totalPairs} pairs → ${fmtTime(b.time)} • ${b.moves} moves` : '' }
+function announceWin(){ const b=getBest(); const cur={time:seconds,moves}; let bestText='—'; if(!b || cur.time<b.time || (cur.time===b.time && cur.moves<b.moves)){ setBest(cur); bestText=`New Best! ${fmtTime(cur.time)} • ${cur.moves} moves` } else { bestText=`Best: ${fmtTime(b.time)} • ${b.moves} moves` } $('#winTime').textContent=fmtTime(seconds); $('#winMoves').textContent=moves; $('#winBest').textContent=bestText; stopTimer(); winDlg.showModal() }
+function wait(ms){ return new Promise(r=>setTimeout(r,ms)) }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) }
+
+function buildDeck(images, pairCount){
+  const uniq = images.slice(0, pairCount);
+  const doubled = uniq.flatMap((img,idx)=>[
+    { id:`${idx}-A`, pair:idx, img },
+    { id:`${idx}-B`, pair:idx, img }
+  ]);
+  return shuffle(doubled);
+}
+
+function renderDeck(){
+  grid.innerHTML='';
+  for(const card of deck){
+    const el=document.createElement('button');
+    el.className='card focusable';
+    el.type='button';
+    el.setAttribute('data-id',card.id);
+    el.setAttribute('aria-label',card.img.alt || card.img.title || 'Hidden photo');
+    el.innerHTML=`
+      <div class="inner">
+        <div class="face back"><span class="q">?</span></div>
+        <div class="face front"><img alt="${escapeHtml(card.img.alt||'')}" src="${card.img.url}"></div>
+      </div>`;
+    el.addEventListener('click',()=>flipCard(el,card));
+    el.addEventListener('keydown',ev=>{ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); flipCard(el,card) } });
+    grid.appendChild(el);
+  }
+}
+
+async function flipCard(el, card){
+  if(lock || el.classList.contains('flipped') || el.classList.contains('matched')) return;
+  if(moves===0 && seconds===0 && !timer) startTimer();
+  el.classList.add('flipped');
+  if(!first){ first={el,card}; return }
+  second={el,card}; lock=true; moves++; movesEl.textContent=moves;
+
+  if(first.card.pair===second.card.pair){
+    matches++; matchesEl.textContent=matches; streak++; streakEl.textContent=streak;
+    first.el.classList.add('matched'); second.el.classList.add('matched');
+    first=second=null; lock=false; if(matches===totalPairs) setTimeout(announceWin,400);
+  } else {
+    streak=0; streakEl.textContent='0'; await wait(600);
+    first.el.classList.remove('flipped'); second.el.classList.remove('flipped');
+    first=second=null; lock=false;
+  }
+}
+
+/* Suggested RS Wolves roots (district + schools) */
+const RS_ROOTS = [
+  "/live-feed",          // district
+  "/o/hs/live-feed",     // high school
+  "/o/ms/live-feed",     // middle school
+  "/o/ps/live-feed",     // primary
+  "/o/es/live-feed",     // elementary
+  "/o/gtc/live-feed"     // Table Rock Career Center
+];
+
+async function newGame(){
+  stopTimer(); resetStats(); winDlg.close();
+  totalPairs = parseInt(pairsSel.value,10);
+  setGridColumns(totalPairs); showBest();
+
+  let images = [];
+  if(useRS.checked){
+    try {
+      // Pull a generous set (pages x roots), then slice to pair count
+      const rsImgs = await fetchApptegyImages({ roots: RS_ROOTS, pages: 3, limit: 80 });
+      images = rsImgs.filter(x => x && x.url);
+      if(images.length < totalPairs){
+        // If not enough, try just district feed deeper
+        const more = await fetchApptegyImages({ roots: ["/live-feed"], pages: 6, limit: 80 });
+        images = images.concat(more);
+      }
+      images = shuffle(images).slice(0, totalPairs);
+    } catch(err){
+      console.warn('Apptegy fetch failed; using placeholders:', err);
+      images = getPlaceholderImages(totalPairs);
+    }
+  } else {
+    images = getPlaceholderImages(totalPairs);
+  }
+
+  deck = buildDeck(images, totalPairs);
+  renderDeck();
+}
+
+/* Events */
+document.getElementById('newGame').addEventListener('click', newGame);
+document.getElementById('restartLink').addEventListener('click', e=>{ e.preventDefault(); newGame() });
+document.getElementById('pairs').addEventListener('change', newGame);
+document.getElementById('showHow').addEventListener('click', ()=> howDlg.showModal());
+document.getElementById('playAgain').addEventListener('click', ()=>{ winDlg.close(); newGame() });
+
+/* Init */
+newGame();
+</script>
+</body>
+</html>
