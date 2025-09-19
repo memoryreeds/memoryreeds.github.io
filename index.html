@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>RS Wolves — Match the Pack</title>
+<title>Match the Pack — RS Wolves Memory Game</title>
 <style>
   :root{ --bg:#0f172a; --panel:#111827; --card:#1f2937; --ink:#e5e7eb; --muted:#9ca3af; --accent:#3b82f6; --accent-2:#22c55e; --gold:#f59e0b; }
   *{ box-sizing:border-box }
@@ -100,6 +100,26 @@
   gap: 10px;
 }
 
+.share-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.btn {
+  background: var(--card);
+  border: 1px solid #2b3443;
+  color: var(--ink);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn.ghost { background: transparent }
+.btn:disabled { opacity: .6; cursor: not-allowed }
+
+
 /* Tweak general spacing on small screens */
 @media (max-width: 900px){
   header { gap: 10px }
@@ -148,7 +168,8 @@
 </head>
 <body>
   <header>
-   <div class="title"> <img src="logo.png" alt="RS Wolves Logo">RS Wolves — Photo Match</div>
+   <div class="title"> <img src="logo.png" alt="RS Wolves Logo">Match the Pack</div>
+    <p class="slogan">Sharpen your mind, run with the wolves!</p>
     <div class="controls">
       <label>Pairs:
         <select id="pairs">
@@ -190,18 +211,29 @@
     <div><a href="#" id="restartLink" style="color:#93c5fd;text-decoration:none">↻ Restart</a></div>
   </footer>
 
-  <dialog id="win">
-    <p class="win-title">🎉 You matched them all!</p>
-    <div class="win-grid">
-      <div class="stat"><div class="label">Time</div><div id="winTime" class="val">—</div></div>
-      <div class="stat"><div class="label">Moves</div><div id="winMoves" class="val">—</div></div>
-      <div class="stat"><div class="label">Best</div><div id="winBest" class="val">—</div></div>
-    </div>
-    <div style="display:flex; gap:10px; justify-content:flex-end">
-      <form method="dialog"><button class="ghost">Close</button></form>
-      <button id="playAgain" class="primary">Play Again</button>
-    </div>
-  </dialog>
+<dialog id="win">
+  <p class="win-title">🏆 You ran with the pack!</p>
+  <div class="win-grid">
+    <div class="stat"><div class="label">Time</div><div id="winTime" class="val">—</div></div>
+    <div class="stat"><div class="label">Moves</div><div id="winMoves" class="val">—</div></div>
+    <div class="stat"><div class="label">Best</div><div id="winBest" class="val">—</div></div>
+  </div>
+
+  <!-- Share row -->
+  <div class="share-row">
+    <button id="shareNative" class="share btn">🔗 Share</button>
+    <button id="shareCopy" class="share btn ghost">📋 Copy link</button>
+    <a id="shareX" class="share btn ghost" target="_blank" rel="noopener">𝕏 Post</a>
+    <a id="shareFB" class="share btn ghost" target="_blank" rel="noopener">Facebook</a>
+    <a id="shareEmail" class="share btn ghost">Email</a>
+  </div>
+
+  <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:10px">
+    <form method="dialog"><button class="ghost">Close</button></form>
+    <button id="playAgain" class="primary">Play Again</button>
+  </div>
+</dialog>
+
 
   <dialog id="how">
     <p class="win-title">How to Play</p>
@@ -361,7 +393,61 @@ window.addEventListener('resize', () =>
 
 function bestKey(){ return `best_${totalPairs}` } function getBest(){ return JSON.parse(localStorage.getItem(bestKey())||'null') } function setBest(o){ localStorage.setItem(bestKey(), JSON.stringify(o)) }
 function showBest(){ const b=getBest(); bestEl.textContent = b ? `Best ${totalPairs} pairs → ${fmtTime(b.time)} • ${b.moves} moves` : '' }
-function announceWin(){ const b=getBest(); const cur={time:seconds,moves}; let bestText='—'; if(!b || cur.time<b.time || (cur.time===b.time && cur.moves<b.moves)){ setBest(cur); bestText=`New Best! ${fmtTime(cur.time)} • ${cur.moves} moves` } else { bestText=`Best: ${fmtTime(b.time)} • ${b.moves} moves` } $('#winTime').textContent=fmtTime(seconds); $('#winMoves').textContent=moves; $('#winBest').textContent=bestText; stopTimer(); winDlg.showModal() }
+function announceWin(){
+  const b=getBest();
+  const cur={time:seconds,moves};
+  let bestText='—';
+  if(!b || cur.time<b.time || (cur.time===b.time && cur.moves<b.moves)){
+    setBest(cur);
+    bestText=`New Best! ${fmtTime(cur.time)} • ${cur.moves} moves`;
+  } else {
+    bestText=`Best: ${fmtTime(b.time)} • ${b.moves} moves`;
+  }
+  $('#winTime').textContent = fmtTime(seconds);
+  $('#winMoves').textContent = moves;
+  $('#winBest').textContent = bestText;
+
+  // 🔗 Prepare share payload
+  const pairs = totalPairs;
+  const text = buildShareText({ time: fmtTime(seconds), moves, pairs });
+  const url  = currentPageLink();
+  const shareData = { title: 'Match the Pack', text, url };
+
+  // Wire up buttons each time dialog opens
+  const btnNative = document.getElementById('shareNative');
+  const btnCopy   = document.getElementById('shareCopy');
+  const aX        = document.getElementById('shareX');
+  const aFB       = document.getElementById('shareFB');
+  const aEmail    = document.getElementById('shareEmail');
+
+  // Native Web Share (if available)
+  if (navigator.share) {
+    btnNative.disabled = false;
+    btnNative.onclick = () => navigator.share(shareData).catch(()=>{});
+  } else {
+    btnNative.disabled = true;
+  }
+
+  // Copy link
+  btnCopy.onclick = () => copyToClipboard(url);
+
+  // X / Twitter
+  const xUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text + ' ') + encodeURIComponent(url);
+  aX.href = xUrl;
+
+  // Facebook
+  const fbUrl = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url);
+  aFB.href = fbUrl;
+
+  // Email
+  const mailto = 'mailto:?subject=' + encodeURIComponent('Match the Pack — I beat the board!') +
+                 '&body=' + encodeURIComponent(text + '\n\n' + url);
+  aEmail.href = mailto;
+
+  stopTimer();
+  winDlg.showModal();
+}
+
 function wait(ms){ return new Promise(r=>setTimeout(r,ms)) }
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) }
 
@@ -416,6 +502,19 @@ async function flipCard(el, card){
     first=second=null; lock=false;
   }
 }
+
+function buildShareText({ time, moves, pairs }) {
+  return `I just finished “Match the Pack” in ${time} with ${moves} moves on a ${pairs*2}-card board! 🐺`;
+}
+function currentPageLink() {
+  // Keep it simple: share the page URL without hash
+  return location.href.split('#')[0];
+}
+async function copyToClipboard(text) {
+  try { await navigator.clipboard.writeText(text); alert('Link copied!'); }
+  catch { prompt('Copy this link:', text); }
+}
+
 
 /* RS Wolves feeds */
 const RS_ROOTS = [ "/live-feed", "/o/hs/live-feed", "/o/ms/live-feed", "/o/ps/live-feed", "/o/es/live-feed", "/o/gtc/live-feed" ];
